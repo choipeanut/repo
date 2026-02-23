@@ -65,13 +65,8 @@ class DistanceConstraint:
     i: int
     j: int
     rest_length: float
-    compliance: float = 0.0
-    _lambda: float = 0.0
 
-    def reset(self) -> None:
-        self._lambda = 0.0
-
-    def project(self, predicted: List[Vec3], inv_masses: List[float], dt: float) -> None:
+    def project(self, predicted: List[Vec3], inv_masses: List[float]) -> None:
         p_i = predicted[self.i]
         p_j = predicted[self.j]
         w_i = inv_masses[self.i]
@@ -89,12 +84,10 @@ class DistanceConstraint:
         c = dist - self.rest_length
         n = v_mul(d, 1.0 / dist)
 
-        alpha_tilde = self.compliance / (dt * dt)
-        delta_lambda = (-c - alpha_tilde * self._lambda) / (w_sum + alpha_tilde)
-        self._lambda += delta_lambda
+        correction = c / w_sum
 
-        predicted[self.i] = v_add(predicted[self.i], v_mul(n, w_i * delta_lambda))
-        predicted[self.j] = v_sub(predicted[self.j], v_mul(n, w_j * delta_lambda))
+        predicted[self.i] = v_sub(predicted[self.i], v_mul(n, w_i * correction))
+        predicted[self.j] = v_add(predicted[self.j], v_mul(n, w_j * correction))
 
 
 class PBDSimulator:
@@ -124,12 +117,9 @@ class PBDSimulator:
 
         predicted = [v_add(xi, v_mul(vi, dt)) for xi, vi in zip(x, v)]
 
-        for c in self.constraints:
-            c.reset()
-
         for _ in range(self.iterations):
             for c in self.constraints:
-                c.project(predicted, w, dt)
+                c.project(predicted, w)
 
         for i in range(len(x)):
             v[i] = v_mul(v_sub(predicted[i], x[i]), 1.0 / dt)

@@ -13,7 +13,7 @@ def build_chain(n: int = 8, spacing: float = 0.3) -> PBDSimulator:
     masses = [0.0] + [1.0] * (n - 1)  # first particle fixed
     particles = ParticleSystem.from_positions(positions, masses)
 
-    constraints = [DistanceConstraint(i, i + 1, spacing, compliance=1e-6) for i in range(n - 1)]
+    constraints = [DistanceConstraint(i, i + 1, spacing) for i in range(n - 1)]
     return PBDSimulator(particles, constraints, iterations=15)
 
 

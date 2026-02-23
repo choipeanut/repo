@@ -1,18 +1,28 @@
 # Position Based Dynamics (PBD) 구현
 
-이 저장소는 Müller et al. (2007) Position Based Dynamics 논문의 핵심 루프를 최소한으로 구현한 예제입니다.
+이 저장소는 Müller et al. (2007) Position Based Dynamics 논문의 핵심 루프를 **일반 PBD** 형태로 구현한 예제입니다.
 
 ## 포함 내용
 
 - 입자 시스템 (`ParticleSystem`)
 - 거리 제약 (`DistanceConstraint`)
-- PBD/XPBD 형태의 반복 투영 시뮬레이터 (`PBDSimulator`)
+- 반복 투영 시뮬레이터 (`PBDSimulator`)
+- 콘솔 데모 (`examples/chain_demo.py`)
+- 시각화 + 상호작용 데모 (`examples/interactive_chain.py`, tkinter 기반)
 
 ## 빠른 실행
 
 ```bash
 python examples/chain_demo.py
 ```
+
+```bash
+python examples/interactive_chain.py
+```
+
+상호작용 데모 조작법:
+- 마우스 좌클릭 드래그: 고정되지 않은 입자 이동
+- `r`: 초기 상태로 리셋
 
 ## 테스트
 

@@ -44,3 +44,21 @@ def test_fixed_particle_does_not_move_under_gravity():
     sim.step(1 / 60)
 
     assert sim.particles.positions[0] == x0[0]
+
+
+def test_free_particles_split_correction_equally():
+    particles = ParticleSystem.from_positions(
+        positions=[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+        masses=[1.0, 1.0],
+    )
+    sim = PBDSimulator(
+        particles,
+        constraints=[DistanceConstraint(0, 1, rest_length=1.0)],
+        gravity=(0.0, 0.0, 0.0),
+        iterations=1,
+    )
+
+    sim.step(1 / 60)
+
+    assert sim.particles.positions[0][0] == 0.5
+    assert sim.particles.positions[1][0] == 1.5
