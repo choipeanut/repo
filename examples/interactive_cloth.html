@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PBD Cloth Demo</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family: system-ui, sans-serif;
+      }
+      .panel {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        backdrop-filter: blur(4px);
+        font-size: 14px;
+      }
+      canvas { display: block; }
+      .title { font-weight: 700; margin-bottom: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="title">PBD Cloth (Structural + Shear + Bend)</div>
+      <div>Drag with mouse to interact · Press <b>R</b> to reset</div>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const sim = {
+        width: 34,
+        height: 22,
+        spacing: 15,
+        gravity: 1200,
+        damping: 0.995,
+        iterations: 10,
+        dt: 1 / 60,
+        points: [],
+        constraints: [],
+        dragIndex: -1,
+        mouse: { x: 0, y: 0, down: false },
+        origin: { x: 160, y: 80 },
+      };
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      function indexOf(x, y) {
+        return y * sim.width + x;
+      }
+
+      function addConstraint(i, j, restLength) {
+        sim.constraints.push({ i, j, restLength });
+      }
+
+      function buildCloth() {
+        sim.points = [];
+        sim.constraints = [];
+
+        for (let y = 0; y < sim.height; y++) {
+          for (let x = 0; x < sim.width; x++) {
+            const px = sim.origin.x + x * sim.spacing;
+            const py = sim.origin.y + y * sim.spacing;
+            const pinned = y === 0 && (x % 4 === 0 || x === sim.width - 1);
+            sim.points.push({
+              x: px,
+              y: py,
+              prevX: px,
+              prevY: py,
+              invMass: pinned ? 0 : 1,
+            });
+          }
+        }
+
+        for (let y = 0; y < sim.height; y++) {
+          for (let x = 0; x < sim.width; x++) {
+            const i = indexOf(x, y);
+
+            if (x + 1 < sim.width) {
+              addConstraint(i, indexOf(x + 1, y), sim.spacing); // structural
+            }
+            if (y + 1 < sim.height) {
+              addConstraint(i, indexOf(x, y + 1), sim.spacing); // structural
+            }
+            if (x + 1 < sim.width && y + 1 < sim.height) {
+              addConstraint(i, indexOf(x + 1, y + 1), Math.sqrt(2) * sim.spacing); // shear
+            }
+            if (x - 1 >= 0 && y + 1 < sim.height) {
+              addConstraint(i, indexOf(x - 1, y + 1), Math.sqrt(2) * sim.spacing); // shear
+            }
+            if (x + 2 < sim.width) {
+              addConstraint(i, indexOf(x + 2, y), 2 * sim.spacing); // bend
+            }
+            if (y + 2 < sim.height) {
+              addConstraint(i, indexOf(x, y + 2), 2 * sim.spacing); // bend
+            }
+          }
+        }
+      }
+
+      function integrate(dt) {
+        for (const p of sim.points) {
+          if (p.invMass === 0) continue;
+          const vx = (p.x - p.prevX) * sim.damping;
+          const vy = (p.y - p.prevY) * sim.damping;
+          p.prevX = p.x;
+          p.prevY = p.y;
+          p.x += vx;
+          p.y += vy + sim.gravity * dt * dt;
+        }
+      }
+
+      function solveConstraints() {
+        for (let iter = 0; iter < sim.iterations; iter++) {
+          for (const c of sim.constraints) {
+            const p1 = sim.points[c.i];
+            const p2 = sim.points[c.j];
+
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const dist = Math.hypot(dx, dy) || 1e-8;
+            const wSum = p1.invMass + p2.invMass;
+            if (wSum === 0) continue;
+
+            const diff = (dist - c.restLength) / dist;
+            const corrX = dx * diff;
+            const corrY = dy * diff;
+
+            if (p1.invMass > 0) {
+              p1.x -= corrX * (p1.invMass / wSum);
+              p1.y -= corrY * (p1.invMass / wSum);
+            }
+            if (p2.invMass > 0) {
+              p2.x += corrX * (p2.invMass / wSum);
+              p2.y += corrY * (p2.invMass / wSum);
+            }
+          }
+
+          if (sim.dragIndex !== -1) {
+            const p = sim.points[sim.dragIndex];
+            p.x = sim.mouse.x;
+            p.y = sim.mouse.y;
+            p.prevX = sim.mouse.x;
+            p.prevY = sim.mouse.y;
+          }
+        }
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (const c of sim.constraints) {
+          const p1 = sim.points[c.i];
+          const p2 = sim.points[c.j];
+          if (Math.abs(c.restLength - sim.spacing) > 0.01) continue;
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+        }
+        ctx.stroke();
+
+        for (const p of sim.points) {
+          if (p.invMass === 0) {
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillRect(p.x - 2.5, p.y - 2.5, 5, 5);
+          }
+        }
+      }
+
+      function nearestPoint(x, y) {
+        let best = -1;
+        let bestDist = 28 * 28;
+        for (let i = 0; i < sim.points.length; i++) {
+          const p = sim.points[i];
+          if (p.invMass === 0) continue;
+          const dx = p.x - x;
+          const dy = p.y - y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestDist) {
+            bestDist = d2;
+            best = i;
+          }
+        }
+        return best;
+      }
+
+      function step() {
+        integrate(sim.dt);
+        solveConstraints();
+        render();
+        requestAnimationFrame(step);
+      }
+
+      canvas.addEventListener('mousedown', (e) => {
+        sim.mouse.down = true;
+        sim.mouse.x = e.clientX;
+        sim.mouse.y = e.clientY;
+        sim.dragIndex = nearestPoint(sim.mouse.x, sim.mouse.y);
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        sim.mouse.x = e.clientX;
+        sim.mouse.y = e.clientY;
+      });
+
+      window.addEventListener('mouseup', () => {
+        sim.mouse.down = false;
+        sim.dragIndex = -1;
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'r') {
+          buildCloth();
+        }
+      });
+
+      window.addEventListener('resize', resize);
+      resize();
+      buildCloth();
+      step();
+    </script>
+  </body>
+</html>
